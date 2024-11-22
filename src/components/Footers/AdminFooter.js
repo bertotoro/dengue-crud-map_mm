@@ -33,7 +33,7 @@ const Footer = () => {
               rel="noopener noreferrer"
               target="_blank"
             >
-              NAT DATA CRUD
+              DENGUE DATA CRUD MAP
             </a>
           </div>
         </Col>

@@ -31,7 +31,7 @@ const Header = () => {
                         tag="h3"
                         className="text-uppercase  mb-2"
                       >
-                        Add NAT Data
+                        Add DENGUE Data
                     </CardTitle>
                   <AddDengueData /> 
                 </CardBody>

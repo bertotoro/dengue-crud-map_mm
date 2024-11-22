@@ -10,51 +10,52 @@ import {
   Table,
   Container,
   Row,
-  Col
+  Col,
+  Nav,
+  NavItem,
+  NavLink
 } from "reactstrap";
-import { Bar, Pie, Doughnut } from "react-chartjs-2";
+import {  Line, Scatter, Bubble } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
   Legend,
   ArcElement,
 } from "chart.js";
+import classnames from "classnames";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Title, Tooltip, Legend);
 
 
-const NatDataList = () => {
-  const [natData, setNatData] = useState([]);
+const DengueDataList = () => {
+  const [dengueData, setDengueData] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
-    respondents: "",
-    age: "",
-    sex: "",
-    ethnic: "",
-    academicPerformance: "",
-    academicDescription: "",
-    iq: "",
-    typeSchool: "",
-    socioStatus: "",
-    studyHabit: "",
-    natResult: "",
+    location: "",
+    cases: "",
+    deaths: "",
+    date: "",
+    regions: "",
   });
   const [previousForm, setPreviousForm] = useState(null);
+
 
   // Fetch data from Firestore
   useEffect(() => {
     const fetchData = async () => {
-      const natCollection = collection(db, "NatData");
-      const natSnapshot = await getDocs(natCollection);
-      const dataList = natSnapshot.docs.map((doc) => ({
+      const dengueCollection = collection(db, "dengueData");
+      const dengueSnapshot = await getDocs(dengueCollection);
+      const dataList = dengueSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-      setNatData(dataList);
+      setDengueData(dataList);
     };
 
     fetchData();
@@ -62,10 +63,10 @@ const NatDataList = () => {
 
   // Delete data
   const handleDelete = async (id) => {
-    const natDocRef = doc(db, "NatData", id);
+    const dengueDocRef = doc(db, "dengueData", id);
     try {
-      await deleteDoc(natDocRef);
-      setNatData(natData.filter((data) => data.id !== id));
+      await deleteDoc(dengueDocRef);
+      setDengueData(dengueData.filter((data) => data.id !== id));
       alert("Data deleted successfully!");
     } catch (error) {
       console.error("Error deleting document: ", error);
@@ -77,26 +78,21 @@ const NatDataList = () => {
     setEditingId(data.id);
     setPreviousForm({ ...data });
     setEditForm({
-      respondents: data.respondents,
-      age: data.age,
-      sex: data.sex,
-      ethnic: data.ethnic,
-      academicPerformance: data.academicPerformance,
-      academicDescription: data.academicDescription,
-      iq: data.iq,
-      typeSchool: data.typeSchool,
-      socioStatus: data.socioStatus,
-      studyHabit: data.studyHabit,
-      natResult: data.natResult,
+      location: data.location,
+      cases: data.cases,
+      deaths: data.deaths,
+      date: data.date,
+      regions: data.regions,
     });
   };
 
   // Update data
   const handleUpdate = async () => {
-    const natDocRef = doc(db, "NatData", editingId);
+    const dengueDocRef = doc(db, "dengueData", editingId);
     try {
-      await updateDoc(natDocRef, { ...editForm });
-      setNatData(natData.map((data) =>
+      
+      await updateDoc(dengueDocRef, { ...editForm });
+      setDengueData(dengueData.map((data) =>
         data.id === editingId ? { id: editingId, ...editForm } : data
       ));
       setEditingId(null);
@@ -119,9 +115,9 @@ const NatDataList = () => {
   };
 
   // Sorting logic
-  const [sortConfig, setSortConfig] = useState({ key: "respondents", direction: "ascending" });
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: "ascending" });
 
-  const sortedData = [...natData].sort((a, b) => {
+  const sortedData = [...dengueData].sort((a, b) => {
     if (a[sortConfig.key] < b[sortConfig.key]) {
       return sortConfig.direction === "ascending" ? -1 : 1;
     }
@@ -140,155 +136,173 @@ const NatDataList = () => {
   };
 
 
-  // Create histogram data
-  const createHistogramData = () => {
-    const resultNat = ["0-9", "10-19", "20-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89", "90-99"];
-    const natFrequencies = resultNat.map(() => 0);
+  const [activeNav, setActiveNav] = useState(1); // State to manage active tab
+  const [scatterFilter, setScatterFilter] = useState("month");
 
-    natData.forEach((data) => {
-      const natResult = data.natResult;
-      if (natResult >= 0 && natResult < 10) natFrequencies[0]++;
-      else if (natResult >= 10 && natResult < 20) natFrequencies[1]++;
-      else if (natResult >= 20 && natResult < 30) natFrequencies[2]++;
-      else if (natResult >= 30 && natResult < 40) natFrequencies[3]++;
-      else if (natResult >= 40 && natResult < 50) natFrequencies[4]++;
-      else if (natResult >= 50 && natResult < 60) natFrequencies[5]++;
-      else if (natResult >= 60 && natResult < 70) natFrequencies[6]++;
-      else if (natResult >= 70 && natResult < 80) natFrequencies[7]++;
-      else if (natResult >= 80 && natResult < 90) natFrequencies[8]++;
-      else if (natResult >= 90 && natResult < 100) natFrequencies[9]++;
-      else natFrequencies[10]++;
-    });
 
+//Line Chart
+// Prepare data for the chart
+const getChartData = () => {
+  const groupedData = {};
+
+  // Group data by month or year based on activeNav
+  dengueData.forEach(data => {
+    const date = new Date(data.date);
+    const key = activeNav === 1 
+      ? date.toLocaleString('default', { month: 'long', year: 'numeric' }) 
+      : date.getFullYear();
+
+    if (!groupedData[key]) {
+      groupedData[key] = { cases: 0, deaths: 0 }; // Initialize deaths to 0
+    }
+    groupedData[key].cases += data.cases;
+    groupedData[key].deaths += data.deaths; // Correctly accumulate deaths
+  });
+
+  const labels = Object.keys(groupedData);
+  const casesData = labels.map(label => groupedData[label].cases);
+  const deathsData = labels.map(label => groupedData[label].deaths); // Collect deaths data
+
+ 
+  
+  return {
+    labels,
+    datasets: [
+      {
+        label: 'Dengue Cases by Date',
+        data: casesData,
+        fill: false,
+        backgroundColor: 'rgba(75,192,192,0.4)',
+        borderColor: 'rgba(75,192,192,1)',
+      },
+      {
+        label: 'Dengue Deaths by Date',
+        data: deathsData,
+        fill: false,
+        backgroundColor: 'rgba(255, 99, 132, 0.4)', // Color for deaths
+        borderColor: 'rgba(255, 99, 132, 1)', // Border color for deaths
+      }
+    ],
+  };
+};
+
+const chartData = getChartData();
+
+  const toggleNavs = (e, index) => {
+    e.preventDefault();
+    setActiveNav(index);
+  };
+
+
+  // ScatterChart
+  const getScatterChartData = () => {
+    const filteredCasesData = scatterFilter === "month"
+      ? dengueData.map((data) => {
+          const date = new Date(data.date);
+          return {
+            x: date.getMonth() + 1, // Months are 0-based in JS Date
+            y: data.cases,
+          };
+        })
+      : dengueData.map((data) => {
+          const date = new Date(data.date);
+          return {
+            x: date.getFullYear(),
+            y: data.cases,
+          };
+        });
+  
+    const filteredDeathsData = scatterFilter === "month"
+      ? dengueData.map((data) => {
+          const date = new Date(data.date);
+          return {
+            x: date.getMonth() + 1, // Months are 0-based in JS Date
+            y: data.deaths, // Assuming 'deaths' is a field in your data
+          };
+        })
+      : dengueData.map((data) => {
+          const date = new Date(data.date);
+          return {
+            x: date.getFullYear(),
+            y: data.deaths, // Assuming 'deaths' is a field in your data
+          };
+        });
+  
     return {
-      labels: resultNat,
       datasets: [
         {
-          label: "Frequency of Respondents",
-          data: natFrequencies,
-          backgroundColor: 'rgba(75,192,192,0.4)', 
+          label: 'Dengue Deaths',
+          data: filteredDeathsData,
+          backgroundColor: 'rgba(255,99,132,0.4)', // Different color for deaths
+          borderColor: 'rgba(255,99,132,1)', // Different border color for deaths
+          borderWidth: 1,
+        },
+        {
+          label: 'Dengue Cases',
+          data: filteredCasesData,
+          backgroundColor: 'rgba(75,192,192,0.4)',
           borderColor: 'rgba(75,192,192,1)',
           borderWidth: 1,
-        },
+        }
+        
       ],
     };
   };
 
-  
 
+//bubbleChart
+const [bubbleFilter, setBubbleFilter] = useState("month"); // New state for bubble chart filter
 
-  // Create pie chart data for Socio-Economic Status
-  const createPieChartData = () => {
-    const socioStatusCount = { "On poverty line": 0, "Above poverty line": 0, "Below poverty line": 0 };
-    let total = 0;
-
-    natData.forEach((data) => {
-      const socioStatus = data.socioStatus;
-      if (socioStatus === "On poverty line") socioStatusCount["On poverty line"]++;
-      else if (socioStatus === "Above poverty line") socioStatusCount["Above poverty line"]++;
-      else if (socioStatus === "Below poverty line") socioStatusCount["Below poverty line"]++;
+// Prepare data for the bubble chart with month/year filter
+const getBubbleChartData = () => {
+  const bubbleCasesData = dengueData
+    .filter(data => {
+      const date = new Date(data.date);
+      return bubbleFilter === "month" ? date.getMonth() + 1 : date.getFullYear();
+    })
+    .map(data => {
+      const date = new Date(data.date);
+      return {
+        x: bubbleFilter === "month" ? date.getMonth() + 1 : date.getFullYear(), // Filter based on selection
+        y: data.cases,
+        r: Math.sqrt(data.deaths) * 2, // Bubble radius based on deaths
+      };
     });
 
-
-
-    total = socioStatusCount["On poverty line"] + socioStatusCount["Above poverty line"] + socioStatusCount["Below poverty line"];
-
-    const getPercentage = (count) => ((count / total) * 100).toFixed(2);
-
-    const labels = [
-      `On poverty line (${getPercentage(socioStatusCount["On poverty line"])}%)`,
-      `Above poverty line (${getPercentage(socioStatusCount["Above poverty line"])}%)`,
-      `Below poverty line (${getPercentage(socioStatusCount["Below poverty line"])}%)`,
-    ];
-
-    return {
-      labels: labels,
-      datasets: [
-        {
-          data: [
-            socioStatusCount["On poverty line"],
-            socioStatusCount["Above poverty line"],
-            socioStatusCount["Below poverty line"],
-          ],
-          backgroundColor: ['rgba(245, 59, 87, 0.8)', 'rgba(76, 81, 191, 0.8)', 'rgba(0, 192, 239, 0.8)'], // Different colors for each status
-          borderColor: 'rgba(255,255,255, 0.8)',
-          borderWidth: 1,
-          hoverOffset: 4,
-        },
-      ],
-    };
-  };
-
-
-
-   // Create doughnut chart data for Socio-Economic Status
-   const createDoughnutChartData = () => {
-    // Updated: New performance categories
-    const performanceCount = {
-      "Outstanding": 0,
-      "Satisfactory": 0,
-      "Did not meet expectation": 0,
-      "Fairly Satisfactory": 0,
-      "Very Satisfactory": 0,
-    };
-    let total = 0;
-  
-    // Iterate through the data and count each performance category
-    natData.forEach((data) => {
-      const performance = data.academicDescription;
-      if (performance === "Outstanding") performanceCount["Outstanding"]++;
-      else if (performance === "Satisfactory") performanceCount["Satisfactory"]++;
-      else if (performance === "Did not meet expectation") performanceCount["Did not meet expectation"]++;
-      else if (performance === "Fairly Satisfactory") performanceCount["Fairly Satisfactory"]++;
-      else if (performance === "Very Satisfactory") performanceCount["Very Satisfactory"]++;
+  const bubbleDeathsData = dengueData
+    .filter(data => {
+      const date = new Date(data.date);
+      return bubbleFilter === "month" ? date.getMonth() + 1 : date.getFullYear();
+    })
+    .map(data => {
+      const date = new Date(data.date);
+      return {
+        x: bubbleFilter === "month" ? date.getMonth() + 1 : date.getFullYear(), // Filter based on selection
+        y: data.deaths,
+        r: Math.sqrt(data.cases) * 2, // Bubble radius based on cases
+      };
     });
-  
-    // Calculate the total count
-    total =
-      performanceCount["Outstanding"] +
-      performanceCount["Satisfactory"] +
-      performanceCount["Did not meet expectation"] +
-      performanceCount["Fairly Satisfactory"] +
-      performanceCount["Very Satisfactory"];
-  
-    // Helper function to calculate percentages
-    const getPercentage = (count) => ((count / total) * 100).toFixed(2);
-  
-    // Updated: Labels with percentages for each performance category
-    const labels = [
-      `Outstanding (${getPercentage(performanceCount["Outstanding"])}%)`,
-      `Satisfactory (${getPercentage(performanceCount["Satisfactory"])}%)`,
-      `Did not meet expectation (${getPercentage(performanceCount["Did not meet expectation"])}%)`,
-      `Fairly Satisfactory (${getPercentage(performanceCount["Fairly Satisfactory"])}%)`,
-      `Very Satisfactory (${getPercentage(performanceCount["Very Satisfactory"])}%)`,
-    ];
-  
-    return {
-      labels: labels,
-      datasets: [
-        {
-          data: [
-            performanceCount["Outstanding"],
-            performanceCount["Satisfactory"],
-            performanceCount["Did not meet expectation"],
-            performanceCount["Fairly Satisfactory"],
-            performanceCount["Very Satisfactory"],
-          ],
-          backgroundColor: [
-            'rgba(75, 192, 192, 0.8)', // Outstanding
-            'rgba(54, 162, 235, 0.8)', // Satisfactory
-            'rgba(255, 99, 132, 0.8)', // Did not meet expectation
-            'rgba(255, 206, 86, 0.8)', // Fairly Satisfactory
-            'rgba(153, 102, 255, 0.8)', // Very Satisfactory
-          ],
-          borderColor: 'rgba(255,255,255, 0.8)',
-          borderWidth: 1,
-          hoverOffset: 4,
-        },
-      ],
-    };
-  };
 
+  return {
+    datasets: [
+      {
+        label: 'Dengue Cases by Mortality Rate',
+        data: bubbleCasesData,
+        backgroundColor: 'rgba(255,99,132,0.4)', // Different color for deaths
+        borderColor: 'rgba(255,99,132,1)',
+        
+      },
+      {
+        label: 'Dengue Deaths by Case Volume',
+        data: bubbleDeathsData,
+        backgroundColor: 'rgba(75,192,192,0.4)',
+        borderColor: 'rgba(75,192,192,1)', // Different border color for deaths
+      },
+    ],
+  };
+};
+
+ 
 
 
   return (
@@ -296,88 +310,52 @@ const NatDataList = () => {
       <Header />
       <Container className="mt--7" fluid>
         <Row className="mt-5">
-          <Col xl="12">
+          <Col xl="11">
             <Card className="shadow" style={{ marginBottom: "40px" }}>
               <CardHeader className="border-0">
-                <h3 className="mb-0">National Achievement Test Data List</h3>
+                <h3 className="mb-0">Dengue Data List</h3>
               </CardHeader>
               <CardBody>
-                <Table className="align-items-center table-flush" responsive>
-                  <thead className="thead-light">
-                    <tr>
-                      <th scope="col">#</th>
-                      <th scope="col" onClick={() => requestSort("respondents")}>
-                        Respondents
-                        {sortConfig.key === "respondents" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("age")}>
-                        Age
-                        {sortConfig.key === "age" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("sex")}>
-                        Sex
-                        {sortConfig.key === "sex" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("ethnic")}>
-                        Ethnic
-                        {sortConfig.key === "ethnic" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      {/* Additional columns for new fields */}
-                      <th scope="col" onClick={() => requestSort("academicPerformance")}>
-                        Performance
-                        {sortConfig.key === "academicPerformance" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("academicDescription")}>
-                        Description
-                        {sortConfig.key === "academicDescription" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("iq")}>
-                        IQ
-                        {sortConfig.key === "iq" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("typeSchool")}>
-                        Type of School
-                        {sortConfig.key === "typeSchool" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("socioStatus")}>
-                        Socioeconomic Status
-                        {sortConfig.key === "socioStatus" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("studyHabit")}>
-                        Study Habit
-                        {sortConfig.key === "studyHabit" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col" onClick={() => requestSort("natResult")}>
-                        National Result
-                        {sortConfig.key === "natResult" && (
-                          <i className={`ni ${sortConfig.direction === "ascending" ? "ni-bold-up" : "ni-bold-down"}`}></i>
-                        )}
-                      </th>
-                      <th scope="col">Actions</th>
-                    </tr>
-                  </thead>
-                  </Table>
+              <Table className="align-items-center table-flush" responsive>
+                <thead className="thead-light">
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col" onClick={() => requestSort('location')}>
+                      Location
+                      {sortConfig.key === 'location' && (
+                        <i className={`ni ${sortConfig.direction === 'ascending' ? 'ni-bold-up' : 'ni-bold-down'}`}></i>
+                      )}
+                    </th>
+                    <th scope="col" onClick={() => requestSort('cases')}>
+                      Cases
+                      {sortConfig.key === 'cases' && (
+                        <i className={`ni ${sortConfig.direction === 'ascending' ? 'ni-bold-up' : 'ni-bold-down'}`}></i>
+                      )}
+                    </th>
+                    <th scope="col" onClick={() => requestSort('deaths')}>
+                      Deaths
+                      {sortConfig.key === 'deaths' && (
+                        <i className={`ni ${sortConfig.direction === 'ascending' ? 'ni-bold-up' : 'ni-bold-down'}`}></i>
+                      )}
+                    </th>
+                    <th scope="col" onClick={() => requestSort('date')}>
+                      Date
+                      {sortConfig.key === 'date' && (
+                        <i className={`ni ${sortConfig.direction === 'ascending' ? 'ni-bold-up' : 'ni-bold-down'}`}></i>
+                      )}
+                    </th>
+                    <th scope="col" onClick={() => requestSort('regions')}>
+                      Regions
+                      {sortConfig.key === 'regions' && (
+                        <i className={`ni ${sortConfig.direction === 'ascending' ? 'ni-bold-up' : 'ni-bold-down'}`}></i>
+                      )}
+                    </th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+              </Table>
 
+                {/* Scrollable Body */}
                 <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                   <Table className="align-items-center table-flush" responsive>
                     <tbody>
@@ -388,173 +366,85 @@ const NatDataList = () => {
                             {editingId === data.id ? (
                               <input
                                 type="text"
-                                name="respondents"
-                                value={editForm.respondents}
+                                name="location"
+                                value={editForm.location}
                                 onChange={handleChange}
                                 required
-                                style={{ maxWidth: '150px', width: '100%' }}
                               />
                             ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.respondents}</span>
+                              <span onDoubleClick={() => handleEdit(data)}>{data.location}</span>
                             )}
                           </td>
                           <td>
                             {editingId === data.id ? (
                               <input
                                 type="number"
-                                name="age"
-                                value={editForm.age}
+                                name="cases"
+                                value={editForm.cases}
                                 onChange={handleChange}
                                 required
-                                style={{ maxWidth: '150px', width: '150%' }}
                               />
                             ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.age}</span>
-                            )}
-                          </td>
-                          <td>
-                            {editingId === data.id ? (
-                              <input
-                                type="text"
-                                name="sex"
-                                value={editForm.sex}
-                                onChange={handleChange}
-                                required
-                                style={{ maxWidth: '150px', width: '100%' }}
-                              />
-                            ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.sex}</span>
-                            )}
-                          </td>
-                          <td>
-                            {editingId === data.id ? (
-                              <input
-                                type="text"
-                                name="ethnic"
-                                value={editForm.ethnic}
-                                onChange={handleChange}
-                                required
-                                style={{ maxWidth: '150px', width: '150%' }}
-
-                              />
-                            ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.ethnic}</span>
+                              <span onDoubleClick={() => handleEdit(data)}>{data.cases}</span>
                             )}
                           </td>
                           <td>
                             {editingId === data.id ? (
                               <input
                                 type="number"
-                                name="academicPerformance"
-                                value={editForm.academicPerformance}
+                                name="deaths"
+                                value={editForm.deaths}
                                 onChange={handleChange}
                                 required
-                                style={{ maxWidth: '150px', width: '150%' }}
                               />
                             ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.academicPerformance}</span>
+                              <span onDoubleClick={() => handleEdit(data)}>{data.deaths}</span>
+                            )}
+                          </td>
+                          <td>
+                            {editingId === data.id ? (
+                              <input
+                                type="date"
+                                name="date"
+                                value={editForm.date}
+                                onChange={handleChange}
+                                required
+                              />
+                            ) : (
+                              <span onDoubleClick={() => handleEdit(data)}>{data.date}</span>
                             )}
                           </td>
                           <td>
                             {editingId === data.id ? (
                               <input
                                 type="text"
-                                name="academicDescription"
-                                value={editForm.academicDescription}
+                                name="regions"
+                                value={editForm.regions}
                                 onChange={handleChange}
                                 required
-                                style={{ maxWidth: '150px', width: '100%' }}
                               />
                             ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.academicDescription}</span>
-                            )}
-                          </td>
-                          <td>
-                            {editingId === data.id ? (
-                              <input
-                                type="text"
-                                name="iq"
-                                value={editForm.iq}
-                                onChange={handleChange}
-                                required
-                                style={{ maxWidth: '150px', width: '150%' }}
-                              />
-                            ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.iq}</span>
-                            )}
-                          </td>
-                          <td>
-                            {editingId === data.id ? (
-                              <input
-                                type="text"
-                                name="typeSchool"
-                                value={editForm.typeSchool}
-                                onChange={handleChange}
-                                required
-                                style={{ maxWidth: '150px', width: '150%' }}
-                              />
-                            ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.typeSchool}</span>
-                            )}
-                          </td>
-                          <td>
-                            {editingId === data.id ? (
-                              <input
-                                type="text"
-                                name="socioStatus"
-                                value={editForm.socioStatus}
-                                onChange={handleChange}
-                                required
-                                style={{ maxWidth: '150px', width: '150%' }}
-                              />
-                            ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.socioStatus}</span>
-                            )}
-                          </td>
-                          <td>
-                            {editingId === data.id ? (
-                              <input
-                                type="text"
-                                name="studyHabit"
-                                value={editForm.studyHabit}
-                                onChange={handleChange}
-                                required
-                                style={{ maxWidth: '150px', width: '150%' }}
-                              />
-                            ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.studyHabit}</span>
-                            )}
-                          </td>
-                          <td>
-                            {editingId === data.id ? (
-                              <input
-                                type="number"
-                                name="natResult"
-                                value={editForm.natResult}
-                                onChange={handleChange}
-                                required
-                                style={{ maxWidth: '150px', width: '150%' }}
-                              />
-                            ) : (
-                              <span onDoubleClick={() => handleEdit(data)}>{data.natResult}</span>
+                              <span onDoubleClick={() => handleEdit(data)}>{data.regions}</span>
                             )}
                           </td>
                           <td>
                             {editingId === data.id ? (
                               <>
-                                <Button color="success" size='sm' onClick={handleUpdate}>Save</Button>
-                                <Button color="danger" size='sm' onClick={handleCancel}>Cancel</Button>
+                                <Button color="success" onClick={handleUpdate} size="sm">  Save </Button>
+                                <Button color="danger" onClick={handleCancel} size="sm">  Cancel </Button>
                               </>
                             ) : (
-                              <>
-                                <Button
-                                  color="danger"
-                                  onClick={() => handleDelete(data.id)}
-                                  size="sm"
-                                >
-                                  Delete
-                                </Button>
-                              </>
+                              <Button
+                                color="danger"
+                                href="#pablo"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDelete(data.id);
+                                }}
+                                size="sm"
+                              >
+                                Delete
+                              </Button>
                             )}
                           </td>
                         </tr>
@@ -568,77 +458,178 @@ const NatDataList = () => {
             </Card>
           </Col>
 
-          {/* Histogram Card */}
-          <Col xl="7">
-            <Card className="bg-gradient-default shadow" style={{ marginBottom: "40px" }}>
-              <CardHeader className="bg-transparent">
-                <Row className="align-items-center">
-                  <div className="col">
-                    <h6 className="text-uppercase text-light ls-1 mb-1">Respondent Nat Result Distribution</h6>
-                    <h2 className="text-white mb-0">Nat Result Histogram</h2>
-                  </div>
-                </Row>
-              </CardHeader>
-              <CardBody>
-                <div className="chart">
-                  <Bar data={createHistogramData()} />
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-
-          {/* Pie Chart Section for Socio-Economic Status */}
-          <Col xl="5">
-            <Card className="bg-gradient-default shadow" style={{ marginBottom: "40px" }}>
-              <CardHeader className="bg-transparent">
-                <Row className="align-items-center">
-                  <div className="col">
-                    <h6 className="text-uppercase text-light ls-1 mb-1">Socio-Economic Status Distribution</h6>
-                    <h2 className="text-white mb-0">Socio-Economic Status</h2>
-                  </div>
-                </Row>
-              </CardHeader>
-              <CardBody>
-                <div className="chart">
-                  <Pie data={createPieChartData()} />
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
+          
 
 
 
-           {/* Pie Chart Section for Socio-Economic Status */}
-           <Col xl="5" >
-              <Card className="bg-gradient-default shadow" style={{ marginBottom: "40px" }}>
-                <CardHeader className="bg-transparent">
-                  <Row className="align-items-center">
-                    <div className="col">
-                      <h6 className="text-uppercase text-light ls-1 mb-1">Performance Description Evaluation Distribution</h6>
-                      <h2 className="text-white mb-0">Performance Evaluation</h2>
-                    </div>
-                  </Row>
-                </CardHeader>
-                <CardBody>
-                  <div className="chart">
-                    {/* Render the Doughnut Chart using Pie component */}
-                    <Doughnut
-                      data={createDoughnutChartData()}
-                      options={{
-                        responsive: true,
-                        plugins: {
-                          legend: {
-                            position: 'top',
-                          },
-                          
+              <Row className="mt-5">
+                        <Col className="mb-5 mb-xl-0" xl="8">
+                          <Card className="bg-gradient-default shadow " style={{ marginBottom: "40px" }}>
+                            <CardHeader className="bg-transparent">
+                              <Row className="align-items-center">
+                                <div className="col">
+                                  <h6 className="text-uppercase text-light ls-1 mb-1">Dengue Cases Statistics</h6>
+                                  <h2 className="text-white mb-0">Line Graph</h2>
+                                </div>
+                                <div className="col-auto">
+                                  <Nav className="nav-pills-icons justify-content-end" pills>
+                                    <NavItem>
+                                      <NavLink
+                                        className={classnames("mb-3", { active: activeNav === 1 })}
+                                        onClick={(e) => toggleNavs(e, 1)}
+                                      >
+                                        Month
+                                      </NavLink>
+                                    </NavItem>
+                                    <NavItem>
+                                      <NavLink
+                                        className={classnames("mb-3", { active: activeNav === 2 })}
+                                        onClick={(e) => toggleNavs(e, 2)}
+                                      >
+                                        Year
+                                      </NavLink>
+                                    </NavItem>
+                                  </Nav>
+                                </div>
+                              </Row>
+                            </CardHeader>
+                            <CardBody>
+                              <div className="chart">
+                                <Line data={chartData} />
+                              </div>
+                            </CardBody>
+                          </Card>
+                        </Col>
+
+                        <Col xl="8">
+                          <Card className="bg-gradient-default shadow" style={{ marginBottom: "40px" }}>
+                            <CardHeader className="bg-transparent">
+                              <Row className="align-items-center">
+                                <div className="col">
+                                  <h6 className="text-uppercase text-light ls-1 mb-1">Dengue Cases Statistics</h6>
+                                  <h2 className="text-white mb-0">Scatter Plot</h2>
+                                </div>
+                                <div className="col-auto">
+                                  <Nav className="nav-pills-icons justify-content-end" pills>
+                                    <NavItem>
+                                      <NavLink
+                                        className={classnames("mb-3", { active: scatterFilter === "month" })}
+                                        onClick={() => setScatterFilter("month")}
+                                      >
+                                        Month
+                                      </NavLink>
+                                    </NavItem>
+                                    <NavItem>
+                                      <NavLink
+                                        className={classnames("mb-3", { active: scatterFilter === "year" })}
+                                        onClick={() => setScatterFilter("year")}
+                                      >
+                                        Year
+                                      </NavLink>
+                                    </NavItem>
+                                  </Nav>
+                                </div>
+                              </Row>
+                            </CardHeader>
+                            <CardBody>
+                              <div className="chart">
+                                <Scatter options={{
+                                    scales: {
+                                      x: {
+                                        title: {
+                                          display: true,
+                                          text: scatterFilter === "month" ? "Month" : "Year",
+                                        },
+                                        ticks: {
+                                          callback: function(value) {
+                                            return scatterFilter === "month"
+                                              ? new Date(0, value - 1).toLocaleString('default', { month: 'long' })
+                                              : value;
+                                          },
+                                        },
+                                      },
+                                      y: {
+                                        title: {
+                                          display: true,
+                                          text: "Cases",
+                                        },
+                                        beginAtZero: true,
+                                      },
+                                    },
+                                  }}
+                                  data={getScatterChartData()}
+                                />
+                              </div>
+                            </CardBody>
+                          </Card>
+                        </Col>
+
+                        <Col xl="8">
+                <Card className="bg-gradient-default shadow">
+                  <CardHeader className="bg-transparent">
+                    <Row className="align-items-center">
+                      <div className="col">
+                        <h6 className="text-uppercase text-light ls-1 mb-1">Dengue Cases Statistics</h6>
+                        <h2 className="text-white mb-0">Bubble Chart</h2>
+                      </div>
+                      <div className="col-auto">
+                        <Nav className="nav-pills-icons justify-content-end" pills>
+                          <NavItem>
+                            <NavLink
+                              className={classnames("mb-3", { active: bubbleFilter === "month" })}
+                              onClick={() => setBubbleFilter("month")}
+                            >
+                              Month
+                            </NavLink>
+                          </NavItem>
+                          <NavItem>
+                            <NavLink
+                              className={classnames("mb-3", { active: bubbleFilter === "year" })}
+                              onClick={() => setBubbleFilter("year")}
+                            >
+                              Year
+                            </NavLink>
+                          </NavItem>
+                        </Nav>
+                      </div>
+                    </Row>
+                  </CardHeader>
+                  <CardBody>
+                    <div className="chart">
+                    <Bubble
+                options={{
+                  scales: {
+                    x: {
+                      title: {
+                        display: true,
+                        text: bubbleFilter === "month" ? "Month" : "Year",
+                      },
+                      ticks: {
+                        callback: function(value) {
+                          // Check if we are filtering by month or year
+                          return bubbleFilter === "month"
+                            ? new Date(Date.parse(value + " 1, 2000")).toLocaleString('default', { month: 'long' }) // Convert month to long format
+                            : value; // Return the year as is
                         },
-                        cutoutPercentage: 70, // Make it a doughnut chart by adding cutout
-                      }}
-                    />
-                  </div>
-                </CardBody>
-              </Card>
-            </Col>
+                      },
+                    },
+                    y: {
+                      title: {
+                        display: true,
+                        text: "Cases",
+                      },
+                      beginAtZero: true,
+                    },
+                  },
+                }}
+                data={getBubbleChartData()}
+              />
+
+                    </div>
+                  </CardBody>
+                </Card>
+              </Col>
+            </Row>
 
         </Row>
       </Container>
@@ -646,4 +637,4 @@ const NatDataList = () => {
   );
 };
 
-export default NatDataList;
+export default DengueDataList;

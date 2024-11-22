@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import Papa from "papaparse"; // To parse CSV files
 import { collection, addDoc } from "firebase/firestore"; // Firestore
 import { db } from "../firebase"; // Firebase configuration
-import { Button, Spinner } from "reactstrap"; // Import Reactstrap Button and Spinner
+import { Button, Spinner, Progress } from "reactstrap"; // Reactstrap components
 
 const CsvUploader = () => {
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false); // Track upload status
+  const [progress, setProgress] = useState(0); // Track upload progress
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -19,6 +20,7 @@ const CsvUploader = () => {
     }
 
     setIsUploading(true);
+    setProgress(0);
 
     // Parse the CSV file
     Papa.parse(file, {
@@ -38,32 +40,28 @@ const CsvUploader = () => {
         }
 
         try {
-          const batch = collection(db, "NatData");
+          const batch = collection(db, "dengueData");
+          const totalRows = rows.length;
 
-          for (const row of rows) {
+          for (let i = 0; i < totalRows; i++) {
+            const row = rows[i];
+
             // Ensure all fields are present before upload and map the correct headers
-            if (
-              row.Respondents && row.Age && row.sex && row.Ethnic &&
-              row.academic_perfromance && row.adamemic_description &&
-              row.IQ && row.type_school && row.socio_economic_status && 
-              row.Study_Habit && row.NAT_Results
-            ) {
+            if (row.loc && row.cases && row.deaths && row.date && row.Region && row.year) {
               await addDoc(batch, {
-                respondents: row.Respondents,                    // Mapping Respondents to respondents
-                age: Number(row.Age),                           // Mapping Age to age (numeric)
-                sex: row.sex,                                   // Mapping sex to sex
-                ethnic: row.Ethnic,                             // Mapping Ethnic to ethnic
-                academicPerformance: Number(row.academic_perfromance),  // Mapping academic_perfromance to academicPerformance (numeric)
-                academicDescription: row.adamemic_description,  // Mapping adamemic_description to academicDescription
-                iq:row.IQ,                                      // Mapping IQ to iq 
-                typeSchool: row.type_school,                    // Mapping type_school to typeSchool
-                socioStatus: row.socio_economic_status,         // Mapping socio_economic_status to socioStatus
-                studyHabit: row.Study_Habit,                    // Mapping Study_Habit to studyHabit
-                natResult: Number(row.NAT_Results)              // Mapping NAT_Results to natResult (numeric)
+                location: row.loc, // Mapping loc to location
+                cases: Number(row.cases), // Ensure cases are numeric
+                deaths: Number(row.deaths), // Ensure deaths are numeric
+                date: row.date, // Date as is
+                regions: row.Region, // Mapping Region to regions
+                year: Number(row.year), // Year as numeric
               });
             } else {
               console.error("Missing required fields in row: ", row);
             }
+
+            // Update progress
+            setProgress(Math.round(((i + 1) / totalRows) * 100));
           }
 
           alert("CSV data uploaded successfully!");
@@ -98,6 +96,12 @@ const CsvUploader = () => {
           "Upload"
         )}
       </Button>
+      {isUploading && (
+        <div style={{ marginTop: "20px" }}>
+          <Progress value={progress} />
+          <p>{progress}% completed</p>
+        </div>
+      )}
     </div>
   );
 };
